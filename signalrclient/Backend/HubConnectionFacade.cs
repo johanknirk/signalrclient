@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Serilog;
 using signalrclient.Backend.Models.Envelope;
+using System.Data.Common;
 using TrumfApp.Framework.Backend.Models.Envelope;
 using ILogger = Serilog.ILogger;
 
@@ -17,15 +18,17 @@ public class HubConnectionFacade : IBackendConnection
     private readonly AccessTokenClient _accessTokenClient;
     HubConnection _connection;
 
-    //string url = "https://ng-tm-dev-bff-svc.azurewebsites.net/mediator";
-    string url = "https://localhost:7047/mediator";
-
+    //string url = "https://dev-app.trumf.no/mediator";
+    //string url = "https://localhost:7047/mediator";
+    string url= "https://ephem101326-app.trumf.no/mediator";
+    
     public HubConnectionFacade(IOptions<BackendServiceOptions> options)
     {
         Log = Serilog.Log.ForContext(GetType());
 
         //TODO hacked
-        var accessToken = File.ReadAllText(@"c:\temp\token.txt");
+        //var accessToken = File.ReadAllText(@"c:\temp\token.txt");
+        var accessToken = "dummy";
 
         try
         {
@@ -37,7 +40,6 @@ public class HubConnectionFacade : IBackendConnection
                 })
                 .WithUrl(url, opt =>
                 {
-                    opt.SkipNegotiation = true;
                     opt.Transports = HttpTransportType.WebSockets;
                     opt.AccessTokenProvider = () => Task.FromResult(accessToken);
                 })
@@ -47,6 +49,18 @@ public class HubConnectionFacade : IBackendConnection
             _connection.KeepAliveInterval = TimeSpan.FromSeconds(10);
 
             _connection.On<RequestEnvelope>("Receive", OnReceive);
+            _connection.On("Reconnect", () =>
+            {
+                Log.Information("Reconnecting...");
+                Task.Run(async () =>
+                {
+                    Log.Information("Calling _connection.StopAsync");
+                    await _connection.StopAsync();
+                    Log.Information("StopAsync completed, calling StartAsync");
+                    await _connection.StartAsync();
+                    Log.Information("Reconnection complete");
+                });
+            });
         }
         catch (Exception ex)
         {
